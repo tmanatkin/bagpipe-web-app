@@ -210,7 +210,7 @@
 <main>
 	<p class="error" style="visibility: {error ? 'visible' : 'hidden'}">{error}</p>
 
-	<h1>Bagpipe Tuner</h1>
+	<h1>Bagpipe Tuner (testing)</h1>
 
 	{#if !isDetecting}
 		<button onclick={startDetection}>Start</button>
