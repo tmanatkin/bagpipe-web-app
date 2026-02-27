@@ -84,6 +84,7 @@ button {
 }
 
 .error {
+	height: 1.2rem;
 	color: red;
 	font-weight: bold;
 }
