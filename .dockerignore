@@ -1,0 +1,41 @@
+# Build outputs
+build/
+.svelte-kit/
+dist/
+
+# Dependencies
+node_modules/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Development
+.vscode/
+.idea/
+
+# Version control
+.git/
+.gitignore
+
+# CI/CD
+.github/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+bun-debug.log*
+
+# Platform specific
+.vercel
+.netlify
+.wrangler
+
+# Misc
+*.md
+!README.md
