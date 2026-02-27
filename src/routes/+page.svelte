@@ -213,9 +213,9 @@
 	<h1>Bagpipe Tuner</h1>
 
 	{#if !isDetecting}
-		<button onclick={startDetection}>Start Detection</button>
+		<button onclick={startDetection}>Start</button>
 	{:else}
-		<button onclick={stopDetection}>Stop Detection</button>
+		<button onclick={stopDetection}>Stop</button>
 	{/if}
 
 	<div class="frequency-display" class:inactive={!isDetecting}>
