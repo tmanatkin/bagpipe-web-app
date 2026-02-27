@@ -223,4 +223,3 @@
 		<span class="unit">Hz</span>
 	</div>
 </main>
-x

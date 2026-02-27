@@ -13,6 +13,7 @@ RUN bun install --frozen-lockfile
 COPY . .
 
 # Build the app
+RUN bun run prepare
 RUN bun run build
 
 # Production stage
