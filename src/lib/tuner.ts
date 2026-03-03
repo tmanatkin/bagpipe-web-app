@@ -1,8 +1,15 @@
-const MIN_FREQUENCY = 100;
-const MAX_FREQUENCY = 1000;
+const MIN_FREQUENCY = 300;
+const MAX_FREQUENCY = 1400;
 const HISTORY_SIZE = 7; // For median filtering
+const LOW_A_FREQUENCY = 490;
 
-type FrequencyCallback = (frequency: number | null) => void;
+type NoteInfo = {
+	note: string;
+	frequency: number;
+	cents: number; // Positive = sharp, negative = flat
+} | null;
+
+type FrequencyCallback = (noteInfo: NoteInfo) => void;
 
 export class Tuner {
 	private audioContext: AudioContext | null = null;
@@ -16,6 +23,69 @@ export class Tuner {
 
 	constructor(onFrequencyUpdate: FrequencyCallback) {
 		this.onFrequencyUpdate = onFrequencyUpdate;
+	}
+
+	// Bagpipe notes from low A: A, B, C#, D, E, F#, G#, then repeats higher
+	private static readonly BAGPIPE_SEMITONES: number[] = [0, 2, 3, 5, 7, 9, 11]; // A, B, C#, D, E, F#, G#
+	private static readonly NOTE_OFFSETS: { [key: number]: string } = {
+		0: 'A',
+		2: 'B',
+		3: 'C',
+		5: 'D',
+		7: 'E',
+		9: 'F',
+		11: 'G'
+	};
+
+	// Calculate which note a frequency corresponds to relative to LOW_A_FREQUENCY
+	private getNoteInfo(frequency: number): NoteInfo {
+		if (frequency <= 0) return null;
+
+		// Calculate semitones from LOW_A_FREQUENCY
+		const semitonesFromLowA = 12 * Math.log2(frequency / LOW_A_FREQUENCY);
+
+		// Find the closest valid bagpipe semitone
+		let closestSemitone = Tuner.BAGPIPE_SEMITONES[0];
+		let closestDistance = Math.abs(semitonesFromLowA - closestSemitone);
+
+		for (const semitone of Tuner.BAGPIPE_SEMITONES) {
+			const distance = Math.abs(semitonesFromLowA - semitone);
+			if (distance < closestDistance) {
+				closestDistance = distance;
+				closestSemitone = semitone;
+			}
+		}
+
+		// Also check octaves above and below (bagpipes have multiple octaves)
+		for (let octave = -2; octave <= 2; octave++) {
+			if (octave === 0) continue; // Already checked
+			for (const semitone of Tuner.BAGPIPE_SEMITONES) {
+				// F# (semitone 9) doesn't exist below low A, only low G
+				if (octave < 0 && semitone === 9) continue;
+
+				const octaveSemitone = semitone + octave * 12;
+				const distance = Math.abs(semitonesFromLowA - octaveSemitone);
+				if (distance < closestDistance) {
+					closestDistance = distance;
+					closestSemitone = octaveSemitone;
+				}
+			}
+		}
+
+		const centsDeviation = (semitonesFromLowA - closestSemitone) * 100;
+		const noteIndex = ((closestSemitone % 12) + 12) % 12;
+		const noteName = Tuner.NOTE_OFFSETS[noteIndex];
+
+		if (!noteName) return null;
+
+		// Calculate the target frequency for the closest note
+		const targetFrequency = LOW_A_FREQUENCY * Math.pow(2, closestSemitone / 12);
+
+		return {
+			note: noteName,
+			frequency: Math.round(targetFrequency * 10) / 10,
+			cents: Math.round(centsDeviation)
+		};
 	}
 
 	// High-pass filter to remove drone frequencies (116 Hz and 233 Hz)
@@ -114,6 +184,29 @@ export class Tuner {
 		if (rms > 0.01) {
 			const result = this.yinPitchDetection(buffer, this.audioContext.sampleRate);
 
+			// Check for octave errors: if frequency is low but doubling puts it in bagpipe range, prefer the octave up
+			if (result.frequency > 0) {
+				const doubledFreq = result.frequency * 2;
+				const median = this.getMedianFrequency();
+
+				// If we detect in the 400-650 Hz range (likely octave down), check if octave up is better
+				if (result.frequency < 650 && doubledFreq <= MAX_FREQUENCY) {
+					// If we have history to compare against, prefer doubling if it's closer to the median
+					if (median !== null) {
+						const diffOriginal = Math.abs(result.frequency - median);
+						const diffDoubled = Math.abs(doubledFreq - median);
+						if (diffDoubled < diffOriginal) {
+							result.frequency = doubledFreq;
+						}
+					} else {
+						// No history yet - if doubling puts us clearly in bagpipe range, use it
+						if (doubledFreq >= 800 && doubledFreq <= MAX_FREQUENCY) {
+							result.frequency = doubledFreq;
+						}
+					}
+				}
+			}
+
 			// Only accept high-confidence detections in the correct range
 			if (
 				result.confidence > 0.92 &&
@@ -127,9 +220,10 @@ export class Tuner {
 				}
 
 				// Update displayed frequency with median of recent detections
-				const median = this.getMedianFrequency();
-				if (median !== null && this.onFrequencyUpdate) {
-					this.onFrequencyUpdate(Math.round(median * 10) / 10);
+				const medianFreq = this.getMedianFrequency();
+				if (medianFreq !== null && this.onFrequencyUpdate) {
+					const noteInfo = this.getNoteInfo(medianFreq);
+					this.onFrequencyUpdate(noteInfo);
 				}
 			}
 		}

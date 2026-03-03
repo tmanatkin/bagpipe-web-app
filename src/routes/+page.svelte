@@ -2,7 +2,13 @@
 	import { onDestroy } from 'svelte';
 	import { Tuner } from '$lib/tuner';
 
-	let frequency = $state<number | null>(null);
+	interface NoteInfo {
+		note: string;
+		frequency: number;
+		cents: number;
+	}
+
+	let noteInfo = $state<NoteInfo | null>(null);
 	let isDetecting = $state(false);
 	let error = $state<string | null>(null);
 
@@ -11,8 +17,8 @@
 	async function startDetection() {
 		try {
 			error = null;
-			tuner = new Tuner((freq) => {
-				frequency = freq;
+			tuner = new Tuner((info) => {
+				noteInfo = info;
 			});
 			await tuner.start();
 			isDetecting = true;
@@ -28,13 +34,13 @@
 			tuner = null;
 		}
 		isDetecting = false;
-		frequency = null;
+		noteInfo = null;
 	}
 
-	function formatFrequency(freq: number | null): string {
-		if (freq === null) return '---.-';
-		if (freq > 999) return '999.9';
-		return freq.toFixed(1);
+	function getSharpFlatText(cents: number): string {
+		if (cents === 0) return 'in tune';
+		if (cents > 0) return `${cents} cents sharp`;
+		return `${Math.abs(cents)} cents flat`;
 	}
 
 	onDestroy(() => {
@@ -53,8 +59,21 @@
 		<button onclick={stopDetection}>Stop</button>
 	{/if}
 
-	<div class="frequency-display" class:inactive={!isDetecting}>
-		<span class="frequency">{formatFrequency(frequency)}</span>
-		<span class="unit">Hz</span>
+	<div class="note-display" class:inactive={!isDetecting}>
+		{#if noteInfo}
+			<div class="note-name">{noteInfo.note}</div>
+			<div
+				class="note-status"
+				class:sharp={noteInfo.cents > 0}
+				class:flat={noteInfo.cents < 0}
+				class:in-tune={noteInfo.cents === 0}
+			>
+				{getSharpFlatText(noteInfo.cents)}
+			</div>
+			<div class="note-frequency">{noteInfo.frequency} Hz</div>
+		{:else}
+			<div class="note-name">---</div>
+			<div class="note-status">listening...</div>
+		{/if}
 	</div>
 </main>
